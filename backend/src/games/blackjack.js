@@ -1,245 +1,159 @@
-import { awardPoints, createShuffledDeck, drawCard, getBlackjackValue, getPlayerById, getConnectedPlayerIds } from "./gameUtils.js";
+import { awardPoints, createShuffledDeck, drawCard, getBlackjackValue, getConnectedPlayerIds } from "./gameUtils.js";
 
-function getCurrentTurnPlayerId(state) {
-  return state.turnOrder[state.currentTurnIndex] ?? null;
-}
-
-function findNextTurnIndex(room, state, startingIndex) {
-  for (let index = startingIndex; index < state.turnOrder.length; index += 1) {
-    const playerId = state.turnOrder[index];
-    const player = getPlayerById(room, playerId);
-
-    if (player?.connected && !state.standing[playerId] && !state.busts[playerId]) {
-      return index;
-    }
-  }
-
-  return -1;
-}
-
-function finishDealerTurn(room) {
+function advanceTurn(room) {
   const state = room.gameState;
+  const currentIndex = state.turnOrder.indexOf(state.currentTurnId);
+  const nextPlayers = state.turnOrder.slice(currentIndex + 1);
+  const nextPlayerId = nextPlayers.find((id) => !state.standings[id] && !state.busts[id]);
 
-  if (state.phase === "roundOver") {
-    return;
+  if (nextPlayerId) {
+    state.currentTurnId = nextPlayerId;
+  } else {
+    state.status = "dealer_turn";
+    state.currentTurnId = null;
+    playDealerTurn(room);
   }
+}
 
-  state.phase = "dealerTurn";
-
+function playDealerTurn(room) {
+  const state = room.gameState;
+  
   while (getBlackjackValue(state.dealerHand) < 17) {
     const card = drawCard(state.deck);
-
-    if (!card) {
-      break;
-    }
-
+    if (!card) break;
     state.dealerHand.push(card);
   }
 
+  evaluateGame(room);
+}
+
+function evaluateGame(room) {
+  const state = room.gameState;
+  state.status = "result";
+  
   const dealerValue = getBlackjackValue(state.dealerHand);
+  const isDealerBust = dealerValue > 21;
   const winners = [];
   const playerResults = {};
 
-  state.turnOrder.forEach((playerId) => {
-    const hand = state.hands[playerId] ?? [];
-    const value = getBlackjackValue(hand);
+  state.turnOrder.forEach((pId) => {
+    const value = getBlackjackValue(state.playerHands[pId]);
     let outcome = "lose";
 
-    if (state.busts[playerId]) {
+    if (state.busts[pId]) {
       outcome = "bust";
-    } else if (dealerValue > 21 || value > dealerValue) {
+    } else if (isDealerBust || value > dealerValue) {
       outcome = "win";
-      winners.push(playerId);
+      winners.push(pId);
     } else if (value === dealerValue) {
       outcome = "push";
     }
 
-    playerResults[playerId] = {
-      value,
-      outcome
-    };
+    playerResults[pId] = { value, outcome };
   });
 
   if (winners.length) {
     awardPoints(room, winners, 2);
   }
 
-  state.phase = "roundOver";
-  state.results = {
-    dealerValue,
-    winners,
-    playerResults
-  };
-}
-
-function advanceTurn(room) {
-  const state = room.gameState;
-  const nextIndex = findNextTurnIndex(room, state, state.currentTurnIndex + 1);
-
-  if (nextIndex === -1) {
-    finishDealerTurn(room);
-    return;
-  }
-
-  state.currentTurnIndex = nextIndex;
-}
-
-function startRound(room, nextRound) {
-  const playerIds = getConnectedPlayerIds(room);
-  const deck = createShuffledDeck();
-  const hands = Object.fromEntries(
-    playerIds.map((playerId) => [playerId, [drawCard(deck), drawCard(deck)].filter(Boolean)])
-  );
-  const dealerHand = [drawCard(deck), drawCard(deck)].filter(Boolean);
-  const standing = {};
-  const busts = {};
-
-  playerIds.forEach((playerId) => {
-    standing[playerId] = getBlackjackValue(hands[playerId]) === 21;
-    busts[playerId] = false;
-  });
-
-  room.gameState = {
-    round: nextRound,
-    phase: playerIds.length ? "playerTurns" : "ready",
-    deck,
-    hands,
-    dealerHand,
-    turnOrder: playerIds,
-    currentTurnIndex: 0,
-    standing,
-    busts,
-    results: null
-  };
-
-  if (!playerIds.length) {
-    return;
-  }
-
-  const state = room.gameState;
-  const firstPlayableIndex = findNextTurnIndex(room, state, 0);
-
-  if (firstPlayableIndex === -1) {
-    finishDealerTurn(room);
-    return;
-  }
-
-  state.currentTurnIndex = firstPlayableIndex;
+  state.gameResult = { dealerValue, winners, playerResults };
 }
 
 export default {
   id: "blackjack",
   name: "Blackjack",
-  description: "Play a simplified multiplayer hand against the dealer with synchronized turns.",
+  description: "A competitive multiplayer Blackjack duel against the dealer.",
   category: "Card Games",
   minPlayers: 1,
   maxPlayers: 6,
   accent: "forest",
   createInitialState() {
     return {
-      round: 1,
-      phase: "ready",
+      status: "waiting", // waiting | dealing | player_turns | dealer_turn | result
       deck: [],
-      hands: {},
+      playerHands: {},
       dealerHand: [],
       turnOrder: [],
-      currentTurnIndex: 0,
-      standing: {},
+      currentTurnId: null,
+      standings: {},
       busts: {},
-      results: null
+      gameResult: null
+    };
+  },
+  serialize({ room }) {
+    const state = room.gameState;
+    const isReveal = state.status === "dealer_turn" || state.status === "result";
+    return {
+      ...state,
+      deck: undefined,
+      dealerHand: (!isReveal && state.dealerHand.length > 1) 
+        ? [state.dealerHand[0], { id: "hidden_hole_card", hidden: true }] 
+        : state.dealerHand
     };
   },
   onAction({ room, playerId, action }) {
     const state = room.gameState;
 
     if (action.type === "start" || action.type === "reset") {
-      const nextRound = state.phase === "ready" && !state.turnOrder.length ? state.round : state.round + 1;
-      startRound(room, nextRound);
+      const playerIds = getConnectedPlayerIds(room);
+      if (playerIds.length === 0) return;
+
+      const deck = createShuffledDeck();
+      const playerHands = {};
+      const standings = {};
+      const busts = {};
+
+      playerIds.forEach((id) => {
+        playerHands[id] = [drawCard(deck), drawCard(deck)];
+        standings[id] = getBlackjackValue(playerHands[id]) === 21;
+        busts[id] = false;
+      });
+
+      state.status = "player_turns";
+      state.deck = deck;
+      state.playerHands = playerHands;
+      state.dealerHand = [drawCard(deck), drawCard(deck)];
+      state.turnOrder = playerIds;
+      state.standings = standings;
+      state.busts = busts;
+      state.gameResult = null;
+
+      const firstActive = playerIds.find((id) => !standings[id] && !busts[id]);
+      if (firstActive) {
+        state.currentTurnId = firstActive;
+      } else {
+        state.status = "dealer_turn";
+        state.currentTurnId = null;
+        playDealerTurn(room);
+      }
       return;
     }
 
-    if (state.phase !== "playerTurns" || getCurrentTurnPlayerId(state) !== playerId) {
+    if (state.status !== "player_turns" || state.currentTurnId !== playerId) {
       return;
     }
 
     if (action.type === "hit") {
       const card = drawCard(state.deck);
+      if (!card) return;
 
-      if (!card) {
-        finishDealerTurn(room);
-        return;
-      }
+      state.playerHands[playerId].push(card);
+      const value = getBlackjackValue(state.playerHands[playerId]);
 
-      state.hands[playerId].push(card);
-      const value = getBlackjackValue(state.hands[playerId]);
-
-      if (value >= 21) {
-        state.standing[playerId] = true;
-        state.busts[playerId] = value > 21;
+      if (value > 21) {
+        state.standings[playerId] = true;
+        state.busts[playerId] = true;
+        advanceTurn(room);
+      } else if (value === 21) {
+        state.standings[playerId] = true;
         advanceTurn(room);
       }
-
       return;
     }
 
     if (action.type === "stand") {
-      state.standing[playerId] = true;
+      state.standings[playerId] = true;
       advanceTurn(room);
     }
-  },
-  onPlayerStatusChanged({ room, playerId }) {
-    const state = room.gameState;
-
-    if (state.phase !== "playerTurns") {
-      return;
-    }
-
-    if (!state.turnOrder.includes(playerId)) {
-      return;
-    }
-
-    if (getCurrentTurnPlayerId(state) === playerId && !getPlayerById(room, playerId)?.connected) {
-      state.standing[playerId] = true;
-      advanceTurn(room);
-      return;
-    }
-
-    const currentTurnPlayerId = getCurrentTurnPlayerId(state);
-
-    if (currentTurnPlayerId && !getPlayerById(room, currentTurnPlayerId)?.connected) {
-      state.standing[currentTurnPlayerId] = true;
-      advanceTurn(room);
-    }
-  },
-  serialize({ room }) {
-    const state = room.gameState;
-    const revealDealer = state.phase === "dealerTurn" || state.phase === "roundOver";
-    const dealerPreview =
-      revealDealer || state.dealerHand.length < 2
-        ? state.dealerHand
-        : [
-            state.dealerHand[0],
-            {
-              id: "hidden-card",
-              label: "Hidden card",
-              hidden: true
-            }
-          ];
-
-    return {
-      ...state,
-      currentTurnPlayerId: state.phase === "playerTurns" ? getCurrentTurnPlayerId(state) : null,
-      dealerHand: dealerPreview,
-      hands: Object.fromEntries(
-        Object.entries(state.hands).map(([playerId, hand]) => [
-          playerId,
-          {
-            cards: hand,
-            value: getBlackjackValue(hand)
-          }
-        ])
-      ),
-      dealerValue: revealDealer ? getBlackjackValue(state.dealerHand) : getBlackjackValue(state.dealerHand.slice(0, 1))
-    };
   }
 };

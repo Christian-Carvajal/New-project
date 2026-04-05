@@ -1,72 +1,83 @@
-import { clamp, randomInt } from "./gameUtils.js";
+import { clamp } from "./gameUtils.js";
 
-function resetRound(state, room, target) {
-  state.round += 1;
-  state.guesses = [];
-  state.feedbackByPlayer = {};
+function resetRound(state) {
+  state.status = state.activePlayers.length === 2 ? "setup" : "waiting";
+  state.targets = {};
+  state.locked = {};
+  state.turnId = null;
   state.winnerId = null;
-  state.status = target ? "active" : "awaitingTarget";
-  state.target = target;
-  state.setterId = state.mode === "host" ? room.hostId : null;
+  state.guesses = [];
+  state.result = null;
 }
 
 export default {
   id: "guessNumber",
-  name: "Guess the Number",
-  description: "Use a host-set or random number, then guide everyone with higher or lower hints.",
-  category: "Simple RNG",
+  name: "Number Duel",
+  description: "Pick a secret number, lock it in, and race to guess your opponent's number first.",
+  category: "Duel",
   minPlayers: 2,
-  maxPlayers: 10,
-  accent: "ember",
+  maxPlayers: 2,
+  accent: "indigo",
   createInitialState() {
     return {
-      round: 1,
-      mode: "system",
       max: 100,
-      status: "active",
-      target: randomInt(1, 100),
-      setterId: null,
+      activePlayers: [],
+      status: "waiting", // waiting, setup, playing, finished
+      locked: {},
+      targets: {},
+      turnId: null,
       winnerId: null,
       guesses: [],
-      feedbackByPlayer: {}
+      result: null
     };
   },
   onAction({ room, playerId, action }) {
     const state = room.gameState;
 
-    if (action.type === "configure" && playerId === room.hostId) {
-      state.mode = action.payload?.mode === "host" ? "host" : "system";
-      state.max = clamp(action.payload?.max ?? state.max, 10, 500);
-
-      if (state.mode === "host") {
-        const target = Number(action.payload?.target);
-        resetRound(state, room, Number.isInteger(target) && target >= 1 && target <= state.max ? target : null);
-        return;
+    if (action.type === "join" && state.status === "waiting") {
+      if (!state.activePlayers.includes(playerId) && state.activePlayers.length < 2) {
+        state.activePlayers.push(playerId);
       }
-
-      resetRound(state, room, randomInt(1, state.max));
+      if (state.activePlayers.length === 2) {
+        state.status = "setup";
+      }
       return;
     }
 
-    if (action.type === "setTarget" && playerId === room.hostId && state.mode === "host") {
-      const target = Number(action.payload?.target);
-
-      if (Number.isInteger(target) && target >= 1 && target <= state.max) {
-        resetRound(state, room, target);
-      }
-
+    if (action.type === "leave" && state.status !== "finished") {
+      state.activePlayers = state.activePlayers.filter((id) => id !== playerId);
+      resetRound(state);
       return;
     }
 
-    if (action.type === "guess" && state.status === "active" && state.target) {
-      if (state.mode === "host" && playerId === state.setterId) {
-        return;
+    if (action.type === "lock" && state.status === "setup") {
+      if (!state.activePlayers.includes(playerId)) return;
+      const target = clamp(action.payload?.target ?? 1, 1, state.max);
+      
+      state.targets[playerId] = target;
+      state.locked[playerId] = true;
+
+      if (state.locked[state.activePlayers[0]] && state.locked[state.activePlayers[1]]) {
+        state.status = "playing";
+        // To be fair, randomize who goes first, or just player 1
+        state.turnId = state.activePlayers[0];
       }
+      return;
+    }
 
-      const guess = clamp(action.payload?.guess ?? 0, 1, state.max);
-      const hint = guess === state.target ? "Correct!" : guess < state.target ? "Too low." : "Too high.";
+    if (action.type === "guess" && state.status === "playing") {
+      if (state.turnId !== playerId) return;
 
-      state.feedbackByPlayer[playerId] = hint;
+      const opponentId = state.activePlayers.find(id => id !== playerId);
+      const opponentTarget = state.targets[opponentId];
+      if (!opponentTarget) return;
+
+      const guess = clamp(action.payload?.guess ?? 1, 1, state.max);
+      let hint;
+      if (guess === opponentTarget) hint = "correct";
+      else if (guess < opponentTarget) hint = "too low";
+      else hint = "too high";
+
       state.guesses = [
         {
           playerId,
@@ -75,36 +86,43 @@ export default {
           timestamp: Date.now()
         },
         ...state.guesses
-      ].slice(0, 20);
+      ].slice(0, 30);
 
-      if (guess === state.target) {
+      if (hint === "correct") {
         state.status = "finished";
         state.winnerId = playerId;
+        state.result = {
+          winnerId: playerId,
+          targets: state.targets
+        };
         room.sessionScores[playerId] = (room.sessionScores[playerId] ?? 0) + 2;
+      } else {
+        state.turnId = opponentId;
       }
-
       return;
     }
 
     if (action.type === "reset" && playerId === room.hostId) {
-      if (state.mode === "host") {
-        resetRound(state, room, null);
-        return;
-      }
-
-      resetRound(state, room, randomInt(1, state.max));
+      resetRound(state);
     }
   },
   serialize({ room, playerId }) {
     const state = room.gameState;
-    const isSetter = state.setterId === playerId;
-    const revealTarget = state.status === "finished" || isSetter;
+    const isFinished = state.status === "finished";
+
+    // Hide opponent's target until finished
+    const visibleTargets = {};
+    if (state.activePlayers.includes(playerId)) {
+      visibleTargets[playerId] = state.targets[playerId];
+    }
+    
+    if (isFinished) {
+      Object.assign(visibleTargets, state.targets);
+    }
 
     return {
       ...state,
-      target: revealTarget ? state.target : null,
-      canGuess: !(state.mode === "host" && isSetter),
-      yourHint: state.feedbackByPlayer[playerId] ?? null
+      targets: visibleTargets
     };
   }
 };

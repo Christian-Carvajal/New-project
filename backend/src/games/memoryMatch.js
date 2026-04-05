@@ -1,159 +1,181 @@
-import { awardPoints, getConnectedPlayers, nextConnectedPlayerId, shuffle } from "./gameUtils.js";
+import { awardPoints, getConnectedPlayerIds, nextConnectedPlayerId, shuffle } from "./gameUtils.js";
 
-const MEMORY_WORDS = ["Nova", "Orbit", "Pulse", "Comet", "Echo", "Prism"];
+// A variety of symbols for dynamic board generation
+const MEMORY_ICONS = ["??", "??", "??", "??", "?", "??", "?", "??", "??", "??", "???", "??", "??", "?", "??", "??", "??", "??", "??", "??", "??", "??", "??", "??", "??"];
 
-function createBoard() {
-  return shuffle(
-    MEMORY_WORDS.flatMap((value, index) => [
-      {
-        id: `${value}-${index}-A`,
-        value,
-        matchedBy: null
-      },
-      {
-        id: `${value}-${index}-B`,
-        value,
-        matchedBy: null
-      }
-    ])
-  );
-}
-
-function ensureMatchMap(room, state) {
-  room.players.forEach((player) => {
-    state.matchesByPlayer[player.id] ??= 0;
-  });
-}
-
-function finalizeBoard(room) {
-  const state = room.gameState;
-  const topPairs = Math.max(...Object.values(state.matchesByPlayer), 0);
-  const winners = topPairs
-    ? Object.entries(state.matchesByPlayer)
-        .filter(([, pairs]) => pairs === topPairs)
-        .map(([playerId]) => playerId)
-    : [];
-
-  state.phase = "finished";
-  state.flippedIndices = [];
-  state.result = {
-    winners,
-    topPairs
-  };
+function createDynamicBoard(pairCount) {
+  const selectedIcons = shuffle([...MEMORY_ICONS]).slice(0, pairCount);
+  
+  const deck = selectedIcons.flatMap((value, index) => [
+    {
+      id: `${index}-A-${Math.random().toString(36).substring(7)}`,
+      value,
+      matched: false
+    },
+    {
+      id: `${index}-B-${Math.random().toString(36).substring(7)}`,
+      value,
+      matched: false
+    }
+  ]);
+  
+  return shuffle(deck);
 }
 
 export default {
   id: "memoryMatch",
   name: "Memory Match",
-  description: "Play on the same synced board, take turns, and keep pairs with the whole room watching.",
+  description: "Take turns flipping cards. Find pairs to keep your turn and score points!",
   category: "Interactive",
-  minPlayers: 2,
-  maxPlayers: 6,
+  minPlayers: 1,
+  maxPlayers: 8,
   accent: "aurora",
-  createInitialState(room) {
+  createInitialState() {
     return {
+      status: "waiting", // waiting | playing | finished
       round: 1,
-      phase: "playing",
-      board: createBoard(),
+      pairCount: 4, // Starts with 4 pairs (8 cards), can grow if wanted
+      board: [],
       flippedIndices: [],
-      turnPlayerId: getConnectedPlayers(room)[0]?.id ?? null,
-      matchesByPlayer: Object.fromEntries(room.players.map((player) => [player.id, 0])),
-      moves: 0,
-      result: null
+      turnPlayerId: null,
+      scoresByPlayer: {},
+      winners: []
+    };
+  },
+  serialize({ room, playerId }) {
+    const state = room.gameState;
+    
+    // Anti-cheat: Send front values only if flipped or matched
+    const secureBoard = state.board.map((card, index) => {
+      const isFlipped = state.flippedIndices.includes(index);
+      const isVisible = card.matched || isFlipped;
+      
+      return {
+        id: card.id,
+        matched: card.matched,
+        isFlipped,
+        value: isVisible ? card.value : null
+      };
+    });
+
+    return {
+      ...state,
+      board: secureBoard
     };
   },
   onAction({ room, playerId, action, helpers }) {
     const state = room.gameState;
-    ensureMatchMap(room, state);
 
-    if (action.type === "reset") {
-      helpers.clearTimer("memoryMismatch");
-      room.gameState = {
-        round: state.round + 1,
-        phase: "playing",
-        board: createBoard(),
-        flippedIndices: [],
-        turnPlayerId: getConnectedPlayers(room)[0]?.id ?? null,
-        matchesByPlayer: Object.fromEntries(room.players.map((player) => [player.id, 0])),
-        moves: 0,
-        result: null
-      };
-      return;
-    }
+    if (action.type === "start" || action.type === "reset") {
+      helpers.clearTimer("mismatch_delay");
+      helpers.clearTimer("next_round_auto");
 
-    if (action.type !== "flip" || state.phase !== "playing" || state.turnPlayerId !== playerId) {
-      return;
-    }
+      const connectedIds = getConnectedPlayerIds(room);
+      if (connectedIds.length === 0) return;
 
-    const index = Number(action.payload?.index);
-    const card = state.board[index];
-
-    if (!Number.isInteger(index) || !card || card.matchedBy || state.flippedIndices.includes(index)) {
-      return;
-    }
-
-    state.flippedIndices.push(index);
-
-    if (state.flippedIndices.length < 2) {
-      return;
-    }
-
-    state.moves += 1;
-    const [firstIndex, secondIndex] = state.flippedIndices;
-    const firstCard = state.board[firstIndex];
-    const secondCard = state.board[secondIndex];
-
-    if (firstCard.value === secondCard.value) {
-      firstCard.matchedBy = playerId;
-      secondCard.matchedBy = playerId;
-      state.matchesByPlayer[playerId] = (state.matchesByPlayer[playerId] ?? 0) + 1;
+      state.status = "playing";
+      state.round = action.type === "reset" ? 1 : state.round;
+      
+      // Gradually increase difficulty depending on round
+      state.pairCount = Math.min(4 + Math.floor((state.round - 1) / 2), 12); 
+      
+      state.board = createDynamicBoard(state.pairCount);
       state.flippedIndices = [];
-      awardPoints(room, [playerId], 1);
-
-      if (state.board.every((boardCard) => boardCard.matchedBy)) {
-        finalizeBoard(room);
+      state.turnPlayerId = connectedIds[0];
+      
+      // Initialize scores if absent
+      if (action.type === "reset") {
+         state.scoresByPlayer = Object.fromEntries(connectedIds.map((id) => [id, 0]));
       }
 
+      state.winners = [];
       return;
     }
 
-    state.phase = "resolving";
+    if (state.status !== "playing" || state.turnPlayerId !== playerId) {
+      return;
+    }
 
-    helpers.scheduleTimer("memoryMismatch", 1200, () => {
-      if (room.currentGameId !== "memoryMatch") {
-        return;
+    if (action.type === "flip_card") {
+      const index = Number(action.payload?.index);
+      
+      // Prevent flipping if 2 cards already flipped (waiting for mismatch timeout)
+      if (state.flippedIndices.length >= 2) return;
+      
+      // Validate index and ensure card isn't already matched or flipped
+      const card = state.board[index];
+      if (!card || card.matched || state.flippedIndices.includes(index)) return;
+
+      state.flippedIndices.push(index);
+
+      if (state.flippedIndices.length === 2) {
+        const [idx1, idx2] = state.flippedIndices;
+        const card1 = state.board[idx1];
+        const card2 = state.board[idx2];
+
+        if (card1.value === card2.value) {
+          // Match!
+          card1.matched = true;
+          card2.matched = true;
+          
+          state.scoresByPlayer[playerId] = (state.scoresByPlayer[playerId] || 0) + 1;
+          state.flippedIndices = [];
+          
+          awardPoints(room, [playerId], 1);
+
+          // Check if game over
+          if (state.board.every(c => c.matched)) {
+             state.status = "finished";
+             
+             // Determine winner
+             const highestScore = Math.max(...Object.values(state.scoresByPlayer));
+             state.winners = Object.entries(state.scoresByPlayer)
+                .filter(([_, score]) => score === highestScore && score > 0)
+                .map(([id, _]) => id);
+
+             // Auto restart after 4 seconds
+             helpers.scheduleTimer("next_round_auto", 4000, () => {
+               if (room.currentGameId !== "memoryMatch") return;
+               room.gameState.round += 1;
+               
+               // Keep same scores, just new board
+               room.gameState.status = "playing";
+               room.gameState.pairCount = Math.min(4 + Math.floor((room.gameState.round - 1) / 2), 12);
+               room.gameState.board = createDynamicBoard(room.gameState.pairCount);
+               room.gameState.flippedIndices = [];
+               
+               const activeIds = getConnectedPlayerIds(room);
+               if(activeIds.length > 0) {
+                 room.gameState.turnPlayerId = nextConnectedPlayerId(room, room.gameState.turnPlayerId) ?? activeIds[0];
+               }
+             });
+          }
+        } else {
+          // No match, clear after delay and switch turns
+          helpers.scheduleTimer("mismatch_delay", 1500, () => {
+             if (room.currentGameId !== "memoryMatch") return;
+             
+             room.gameState.flippedIndices = [];
+             
+             const activeIds = getConnectedPlayerIds(room);
+             if(activeIds.length > 0) {
+                room.gameState.turnPlayerId = nextConnectedPlayerId(room, playerId) ?? activeIds[0];
+             }
+          });
+        }
       }
-
-      room.gameState.flippedIndices = [];
-      room.gameState.phase = "playing";
-      room.gameState.turnPlayerId = nextConnectedPlayerId(room, room.gameState.turnPlayerId) ?? room.gameState.turnPlayerId;
-    });
-  },
-  onPlayerStatusChanged({ room, playerId }) {
-    const state = room.gameState;
-    ensureMatchMap(room, state);
-    state.matchesByPlayer[playerId] ??= 0;
-
-    if (state.phase === "playing" && room.players.every((player) => player.id !== state.turnPlayerId || !player.connected)) {
-      state.turnPlayerId = nextConnectedPlayerId(room, state.turnPlayerId) ?? null;
     }
   },
-  serialize({ room }) {
+  onPlayerStatusChanged({ room }) {
     const state = room.gameState;
+    const connectedIds = getConnectedPlayerIds(room);
+    
+    connectedIds.forEach((id) => {
+        state.scoresByPlayer[id] ??= 0;
+    });
 
-    return {
-      ...state,
-      cards: state.board.map((card, index) => {
-        const isFaceUp = state.flippedIndices.includes(index) || Boolean(card.matchedBy);
-
-        return {
-          id: card.id,
-          index,
-          value: isFaceUp ? card.value : null,
-          status: card.matchedBy ? "matched" : isFaceUp ? "faceUp" : "hidden",
-          matchedBy: card.matchedBy
-        };
-      })
-    };
+    if (state.status === "playing" && !connectedIds.includes(state.turnPlayerId)) {
+        state.turnPlayerId = connectedIds[0] || null;
+    }
   }
 };

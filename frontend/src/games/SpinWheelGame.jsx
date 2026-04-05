@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 
-export default function SpinWheelGame({ room, isHost, playerId, onAction }) {
+export default function SpinWheelGame({ room, isHost, me, sendAction }) {
+  const playerId = me?.id;
+  const onAction = sendAction;
   const { gameState, players } = room;
   const { status, round, entriesRequired, chaosChance, playerStates = {}, wheel = [], currentResult, targetAngle } = gameState;
   
@@ -12,9 +14,9 @@ export default function SpinWheelGame({ room, isHost, playerId, onAction }) {
   useEffect(() => {
     if (status === 'entry_phase' && !myState.locked) {
       if (myState.entries.length === 0 && localEntries.length === 0) {
-         setLocalEntries(Array(entriesRequired).fill({ text: '', weight: Math.floor(100/entriesRequired), target: 'self' }));
+         setLocalEntries(Array.from({ length: entriesRequired }, () => ({ text: '', weight: Math.floor(100/entriesRequired), target: 'self' })));
       } else if (localEntries.length !== entriesRequired) {
-         setLocalEntries(Array(entriesRequired).fill({ text: '', weight: Math.floor(100/entriesRequired), target: 'self' }));
+         setLocalEntries(Array.from({ length: entriesRequired }, () => ({ text: '', weight: Math.floor(100/entriesRequired), target: 'self' })));
       }
     }
   }, [entriesRequired, status, myState.locked]);

@@ -6,7 +6,9 @@ const icons = {
   scissors: '??'
 };
 
-export default function RockPaperScissorsGame({ room, isHost, playerId, onAction }) {
+export default function RockPaperScissorsGame({ room, isHost, me, sendAction }) {
+  const playerId = me?.id;
+  const onAction = sendAction;
   const { gameState, players } = room;
   const { status, round, startingHp, playerStates = {}, lastResult, connectedIds = [] } = gameState;
 
@@ -68,8 +70,8 @@ export default function RockPaperScissorsGame({ room, isHost, playerId, onAction
                     ))}
                   </div>
                 </div>
-                <button onClick={() => onAction('start')} className="w-full py-3 mt-4 bg-green-600 hover:bg-green-500 font-black rounded-lg shadow-[0_0_15px_rgba(22,163,74,0.5)]">
-                  START BATTLE
+                <button onClick={() => onAction('start')} disabled={connectedIds.length !== 2} className="w-full py-3 mt-4 bg-green-600 hover:bg-green-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:opacity-100 font-black rounded-lg shadow-[0_0_15px_rgba(22,163,74,0.5)]">
+                  {connectedIds.length !== 2 ? `NEED EXACTLY 2 PLAYERS (${connectedIds.length}/2)` : 'START BATTLE'}
                 </button>
              </div>
            ) : (

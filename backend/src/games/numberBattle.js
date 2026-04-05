@@ -5,7 +5,7 @@ export default {
   name: "Number Battle",
   description: "A strategic game of numbers. Highest wins, but 1 beats the opponent's highest available number!",
   category: "Strategy",
-  minPlayers: 2,
+  minPlayers: 1,
   maxPlayers: 4,
   accent: "red",
   createInitialState() {
@@ -43,7 +43,6 @@ export default {
     if (action.type === "start") {
       helpers.clearTimer("next_round_auto");
       const connectedIds = getConnectedPlayerIds(room);
-      if (connectedIds.length < 2) return;
 
       state.status = "playing";
       state.round = 1;
@@ -92,7 +91,7 @@ export default {
       const allLocked = connectedIds.every(id => state.playerStates[id]?.locked);
       if (allLocked && connectedIds.length > 0) {
         evaluateRound(room, helpers);
-      } else if (connectedIds.length <= 1) {
+      } else if (connectedIds.length < 1) {
         state.status = "finished";
       }
     }

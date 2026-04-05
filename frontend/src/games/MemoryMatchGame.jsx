@@ -1,6 +1,8 @@
 import React from 'react';
 
-export default function MemoryMatchGame({ room, isHost, playerId, onAction }) {
+export default function MemoryMatchGame({ room, isHost, me, sendAction }) {
+  const playerId = me?.id;
+  const onAction = sendAction;
   const { gameState } = room;
   const { status, board = [], turnPlayerId, scoresByPlayer = {}, round } = gameState;
 
@@ -8,30 +10,32 @@ export default function MemoryMatchGame({ room, isHost, playerId, onAction }) {
 
   const renderCard = (card, index) => {
     return (
-      <button
-        key={card.id}
-        onClick={() => onAction('flip_card', { index })}
-        disabled={!isMyTurn || card.matched || card.isFlipped}
-        className={`w-full aspect-[3/4] rounded-lg transition-all duration-300 transform preserve-3d
-          ${(card.isFlipped || card.matched) ? 'rotate-y-180' : 'hover:-translate-y-1 bg-indigo-600'}
-          ${card.matched ? 'opacity-50' : ''}
-          relative`}
-        style={{ perspective: '1000px' }}
-      >
-         <div className="absolute inset-0 backface-hidden flex items-center justify-center rounded-lg shadow-inner border-2 border-indigo-400">
-             {!card.isFlipped && !card.matched && (
-                 <span className="text-2xl text-indigo-300 opacity-50">?</span>
-             )}
-         </div>
-         <div className="absolute inset-0 backface-hidden rotate-y-180 flex items-center justify-center rounded-lg bg-white border-2 border-indigo-200 shadow-md">
-             <span className="text-4xl">{card.value}</span>
-         </div>
-      </button>
+      <div key={card.id} className="w-full aspect-[3/4] perspective-1000">
+        <button
+          onClick={() => onAction('flip_card', { index })}
+          disabled={!isMyTurn || card.matched || card.isFlipped}
+          className={`w-full h-full rounded-lg transition-all duration-500 transform preserve-3d relative shadow-md
+            ${(card.isFlipped || card.matched) ? 'rotate-y-180' : 'hover:-translate-y-1'}
+            ${card.matched ? 'opacity-50' : 'opacity-100'}
+          `}
+        >
+           {/* FRONT of the card (Question Mark) */}
+           <div className="absolute inset-0 backface-hidden w-full h-full flex items-center justify-center rounded-lg bg-indigo-600 border-2 border-indigo-400">
+               <span className="text-3xl text-indigo-300 opacity-80 font-black">?</span>
+           </div>
+
+           {/* BACK of the card (The Icon) */}
+           <div className="absolute inset-0 backface-hidden rotate-y-180 w-full h-full flex items-center justify-center rounded-lg bg-white border-2 border-indigo-200">
+               <span className="text-4xl sm:text-5xl">{card.value}</span>
+           </div>
+        </button>
+      </div>
     );
   };
   
   // Custom CSS for flip animation needed since tailwind doesn't have it built-in cleanly
   const extraStyles = `
+    .perspective-1000 { perspective: 1000px; }
     .preserve-3d { transform-style: preserve-3d; }
     .backface-hidden { backface-visibility: hidden; }
     .rotate-y-180 { transform: rotateY(180deg); }
@@ -51,9 +55,10 @@ export default function MemoryMatchGame({ room, isHost, playerId, onAction }) {
         {status === 'waiting' && isHost && (
           <button
             onClick={() => onAction('start')}
-            className="w-full py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded font-medium transition"
+            disabled={room.players.length < 2}
+            className="w-full py-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-slate-700 disabled:text-slate-400 text-white rounded font-medium transition uppercase tracking-wider"
           >
-            Start Game
+            {room.players.length < 2 ? `Waiting for players (${room.players.length}/2)` : 'Start Match'}
           </button>
         )}
         {status === 'waiting' && !isHost && (

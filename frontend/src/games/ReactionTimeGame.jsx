@@ -1,6 +1,8 @@
 import React, { useEffect } from 'react';
 
-export default function ReactionTimeGame({ room, isHost, playerId, onAction }) {
+export default function ReactionTimeGame({ room, isHost, me, sendAction }) {
+  const playerId = me?.id;
+  const onAction = sendAction;
   const { gameState, players } = room;
   const { status, round, scores = {}, earlyClickers = [], lastResult } = gameState;
 

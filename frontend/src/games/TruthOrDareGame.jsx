@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 
 const SPICE_LEVELS = ['normal', 'flirty', 'spicy'];
 
-export default function TruthOrDareGame({ room, isHost, playerId, onAction }) {
+export default function TruthOrDareGame({ room, isHost, me, sendAction }) {
+  const playerId = me?.id;
+  const onAction = sendAction;
   const { gameState, players } = room;
   const { status, round, promptsRequired, chaosChance, spiceMode, playerStates = {}, currentTurnId, currentResult, connectedIds } = gameState;
   
@@ -86,8 +88,8 @@ export default function TruthOrDareGame({ room, isHost, playerId, onAction }) {
                 <option value="flirty">Flirty</option>
                 <option value="spicy">Spicy</option>
               </select>
-              <button onClick={() => onAction('start')} className="px-6 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded shadow transition uppercase active:scale-95">
-                Start Game
+              <button onClick={() => onAction('start')} disabled={connectedIds?.length < 2} className="w-full py-3 bg-rose-600 hover:bg-rose-500 disabled:bg-slate-700 disabled:text-slate-400 font-black rounded shadow transition uppercase active:scale-95">
+                {connectedIds?.length < 2 ? `Waiting for players (${connectedIds?.length}/2)` : 'Start Game'}
               </button>
             </div>
          )}

@@ -16,7 +16,7 @@ export default {
   name: "Mystery Chaos Wheel",
   description: "Secretly add entries. Spin the wheel to decide your fate. Beware of Chaos!",
   category: "Interactive",
-  minPlayers: 2,
+  minPlayers: 1,
   maxPlayers: 4,
   accent: "purple",
   createInitialState() {
@@ -59,7 +59,6 @@ export default {
 
     if (action.type === "start" && state.status === "waiting") {
       helpers.clearTimer("state_advance");
-      if (connectedIds.length < 2) return;
 
       state.status = "entry_phase";
       state.round = 1;
@@ -132,7 +131,7 @@ export default {
     const state = room.gameState;
     const connectedIds = getConnectedPlayerIds(room);
     
-    if (state.status !== "waiting" && connectedIds.length < 2) {
+    if (state.status !== "waiting" && connectedIds.length < 1) {
       state.status = "finished";
       helpers.clearTimer("state_advance");
     } else if (state.status === "entry_phase") {

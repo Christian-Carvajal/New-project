@@ -1,6 +1,8 @@
 import React from 'react';
 
-export default function NumberBattleGame({ room, isHost, playerId, onAction }) {
+export default function NumberBattleGame({ room, isHost, me, sendAction }) {
+  const playerId = me?.id;
+  const onAction = sendAction;
   const { gameState, players } = room;
   const { status, round, playerStates = {}, lastRoundResult, connectedIds = [] } = gameState;
 

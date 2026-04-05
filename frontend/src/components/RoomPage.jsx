@@ -113,14 +113,8 @@ export default function RoomPage({ socketConnected, soundEnabled }) {
   }
 
   const copyInviteLink = () => {
-    // Vite provides the base path from vite.config.js automatically here!
-    const baseUrl = import.meta.env.BASE_URL; 
-    const url = `${window.location.origin}${baseUrl}#/room/${roomId}`;
-    
+    const url = `${window.location.origin}/New-project/#/room/${roomId}`;
     navigator.clipboard.writeText(url);
-    if(soundEnabled) playUiSound('click');
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   if (!roomState) {

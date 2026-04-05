@@ -358,19 +358,11 @@ export default function RoomPageView({ socketConnected, soundEnabled, theme, onT
 
   async function handleCopyLink() {
     try {
-      const baseUrl = import.meta.env.BASE_URL;
-      const url = `${window.location.origin}${baseUrl}#/room/${roomId}`;
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      playUiSound("success", soundEnabled);
-
-      if (copiedTimeoutRef.current) {
-        window.clearTimeout(copiedTimeoutRef.current);
-      }
-
-      copiedTimeoutRef.current = window.setTimeout(() => setCopied(false), 1800);
-    } catch {
-      setError("Copy failed. You can still share the room URL manually.");
+      await navigator.clipboard.writeText(
+        `${window.location.origin}/New-project/#/room/${roomId}`
+      );
+    } catch (err) {
+      console.error(err);
     }
   }
 

@@ -463,7 +463,7 @@ export default function RoomPageView({ socketConnected, soundEnabled, theme, onT
   );
 
   const gamePanel = (
-    <section className={cn("flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.75rem] border backdrop-blur-xl", classes.panelSurface)}>
+    <section className={cn("flex flex-col rounded-[1.75rem] border backdrop-blur-xl", isDesktop ? "min-h-0 flex-1 overflow-hidden" : "min-h-[28rem] shrink-0", classes.panelSurface)}>
       <div className={cn("flex items-start justify-between gap-4 border-b px-5 py-4", classes.gameHeaderSurface)}>
         <div className="min-w-0">
           <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-indigo-400">{roomState.currentGame.category}</p>
@@ -477,7 +477,7 @@ export default function RoomPageView({ socketConnected, soundEnabled, theme, onT
         ) : null}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className={cn(isDesktop ? "min-h-0 flex-1 overflow-y-auto" : "flex-1")}>
         <ActiveGame
           game={roomState.currentGame}
           gameState={roomState.gameState}

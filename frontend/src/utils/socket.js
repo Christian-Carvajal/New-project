@@ -14,9 +14,11 @@ function resolveServerUrl() {
   return window.location.origin;
 }
 
-export const socket = io(resolveServerUrl(), {
+export const socket = io("https://new-project-o5yz.onrender.com", {
   autoConnect: false,
-  transports: ["websocket", "polling"]
+  transports: ["websocket", "polling"],
+  reconnection: true,
+  reconnectionAttempts: 5
 });
 
 export function ensureSocketConnection() {

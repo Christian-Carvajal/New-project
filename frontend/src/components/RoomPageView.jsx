@@ -358,7 +358,9 @@ export default function RoomPageView({ socketConnected, soundEnabled, theme, onT
 
   async function handleCopyLink() {
     try {
-      await navigator.clipboard.writeText(`${window.location.origin}/room/${roomId}`);
+      const baseUrl = import.meta.env.BASE_URL;
+      const url = `${window.location.origin}${baseUrl}#/room/${roomId}`;
+      await navigator.clipboard.writeText(url);
       setCopied(true);
       playUiSound("success", soundEnabled);
 

@@ -98,7 +98,7 @@ export default function LandingPageView({ socketConnected, soundEnabled, theme, 
   }
 
   return (
-    <div className={`relative flex min-h-[100dvh] w-full flex-col overflow-hidden pb-safe font-sans selection:bg-indigo-500/30 ${classes.shell}`}>
+    <div className={`relative flex min-h-[100dvh] w-full flex-col overflow-x-hidden pb-safe font-sans selection:bg-indigo-500/30 ${classes.shell}`}>
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -left-[10%] -top-[8%] h-80 w-80 rounded-full bg-indigo-600/18 blur-3xl" />
         <div className="absolute -bottom-[14%] -right-[6%] h-80 w-80 rounded-full bg-emerald-500/14 blur-3xl" />
@@ -134,8 +134,8 @@ export default function LandingPageView({ socketConnected, soundEnabled, theme, 
         </div>
       </header>
 
-      <main className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 overflow-y-auto px-5 pb-8 pt-6 md:px-8 md:pb-10 md:pt-8">
-        <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+      <main className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-5 pb-8 pt-6 md:px-8 md:pb-10 md:pt-8">
+        <section className="flex flex-col-reverse gap-6 lg:grid lg:grid-cols-[1.15fr_0.85fr]">
           <div className={`rounded-[2rem] border p-6 backdrop-blur-xl md:p-8 ${classes.heroSurface}`}>
             <span className="inline-flex rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.24em] text-indigo-400">
               User-Centered Multiplayer

@@ -1,9 +1,9 @@
 import React from 'react';
 
 const icons = {
-  rock: '??',
-  paper: '??',
-  scissors: '??'
+  rock: '🪨',
+  paper: '📄',
+  scissors: '✂️'
 };
 
 export default function RockPaperScissorsGame({ room, isHost, me, sendAction }) {
